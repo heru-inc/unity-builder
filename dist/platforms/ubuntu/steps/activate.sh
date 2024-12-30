@@ -107,9 +107,10 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
   then
     echo "Activation failed after 5 retries"
     UNITY_EXIT_CODE=1
+  else
+    export FLOATING_LICENSE=$(echo "$activation_output" | tail -1 | sed -e 's,.* \([-0-9a-f]\{36\}\).*,\1,')
+    echo "Floating license acquired: \"$FLOATING_LICENSE\""
   fi
-
-  export FLOATING_LICENSE=$(echo "$activation_output" | tail -1 | sed -e 's,.* \([-0-9a-f]\{36\}\).*,\1,')
 
 else
   #
