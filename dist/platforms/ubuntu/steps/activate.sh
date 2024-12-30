@@ -1,5 +1,35 @@
 #!/usr/bin/env bash
 
+function with_backoff {
+  local max_attempts=${ATTEMPTS-5}
+  local timeout=${TIMEOUT-5}
+  local attempt=0
+  local exitCode=0
+
+  while [[ $attempt < $max_attempts ]]
+  do
+    "$@"
+    exitCode=$?
+
+    if [[ $exitCode == 0 ]]
+    then
+      break
+    fi
+
+    echo "Failure, exit code $exitCode! Retrying in $timeout seconds..." 1>&2
+    sleep $timeout
+    attempt=$(( attempt + 1 ))
+    timeout=$(( timeout * 2 ))
+  done
+
+  if [[ $exitCode != 0 ]]
+  then
+    echo "Failed $max_attempts times, not trying again." 1>&2
+  fi
+
+  return $exitCode
+}
+
 # if blankproject folder doesn't exist create it
 if [ ! -d "/BlankProject" ]; then
   mkdir /BlankProject
@@ -67,19 +97,9 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
   #
   echo "Adding licensing server config"
 
-  /opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating > license.txt #is this accessible in a env variable?
-  echo "--- License file ---"
-  cat license.txt
-  echo "--------------------"
-
-  PARSEDFILE=$(grep -oP '\".*?\"' < license.txt | tr -d '"')
-  export FLOATING_LICENSE
-  FLOATING_LICENSE=$(sed -n 2p <<< "$PARSEDFILE")
-  FLOATING_LICENSE_TIMEOUT=$(sed -n 4p <<< "$PARSEDFILE")
-
-  echo "Acquired floating license: \"$FLOATING_LICENSE\" with timeout $FLOATING_LICENSE_TIMEOUT"
-  # Store the exit code from the verify command
+  with_backoff /opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating
   UNITY_EXIT_CODE=$?
+
 else
   #
   # NO LICENSE ACTIVATION STRATEGY MATCHED
