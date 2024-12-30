@@ -1,35 +1,5 @@
 #!/usr/bin/env bash
 
-function with_backoff {
-  local max_attempts=${ATTEMPTS-5}
-  local timeout=${TIMEOUT-5}
-  local attempt=0
-  local exitCode=0
-
-  while [[ $attempt < $max_attempts ]]
-  do
-    "$@"
-    exitCode=$?
-
-    if [[ $exitCode == 0 ]]
-    then
-      break
-    fi
-
-    echo "Failure, exit code $exitCode! Retrying in $timeout seconds..." 1>&2
-    sleep $timeout
-    attempt=$(( attempt + 1 ))
-    timeout=$(( timeout * 2 ))
-  done
-
-  if [[ $exitCode != 0 ]]
-  then
-    echo "Failed $max_attempts times, not trying again." 1>&2
-  fi
-
-  return $exitCode
-}
-
 # if blankproject folder doesn't exist create it
 if [ ! -d "/BlankProject" ]; then
   mkdir /BlankProject
@@ -97,8 +67,42 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
   #
   echo "Adding licensing server config"
 
-  with_backoff /opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating
-  UNITY_EXIT_CODE=$?
+  # Loop the unity-editor call until the license is activated with exponential backoff and a maximum of 5 retries
+  retry_count=0
+
+  # Initialize delay to 15 seconds
+  delay=15
+
+  while [[ $retry_count -lt 5 ]]
+  do
+    # Activate license
+    activation_output=$(/opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating)
+
+    # Store the exit code from the verify command
+    UNITY_EXIT_CODE=$?
+
+    # Check if UNITY_EXIT_CODE is 0 AND activation_output contains the phrase "Expires"
+    if [[ $UNITY_EXIT_CODE -eq 0 && $activation_output == *"Expires"* ]]
+    then
+      echo "Activation successful"
+      break
+    else
+      # Increment retry count
+      ((retry_count++))
+
+      echo "::warning ::Activation failed, attempting retry #$retry_count"
+      echo "Activation failed, retrying in $delay seconds..."
+      sleep $delay
+
+      # Double the delay for the next iteration
+      delay=$((delay * 2))
+    fi
+  done
+
+  if [[ $retry_count -eq 5 ]]
+  then
+    echo "Activation failed after 5 retries"
+  fi
 
 else
   #
