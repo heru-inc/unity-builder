@@ -81,6 +81,10 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
     # Store the exit code from the verify command
     UNITY_EXIT_CODE=$?
 
+    echo "---------- Activation output ----------"
+    echo "$activation_output"
+    echo "---------------------------------------"
+
     # Check if UNITY_EXIT_CODE is 0 AND activation_output contains the phrase "Expires"
     if [[ $UNITY_EXIT_CODE -eq 0 && $activation_output == *"Expires"* ]]
     then
