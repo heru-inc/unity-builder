@@ -22,7 +22,7 @@ pre-commit:
     run tests:
       glob: '*.{js,jsx,ts,tsx}'
       exclude: 'dist/'
-      run: yarn jest --passWithNoTests --findRelatedTests {staged_files}
+      run: yarn jest --runInBand --detectOpenHandles --passWithNoTests --findRelatedTests {staged_files}
     build distributables:
       skip: ['merge', 'rebase']
       run: yarn build && git add dist

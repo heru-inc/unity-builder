@@ -1,10 +1,38 @@
 import ImageEnvironmentFactory from './image-environment-factory';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import type { RunnerContext } from './action';
 import { ExecOptions, exec } from '@actions/exec';
 import { DockerParameters, StringKeyValuePair } from './shared-types';
 
+/**
+ * Build a path for a docker --cidfile parameter. Docker will store the the created container.
+ * This path is stable for the whole execution of the action, so it can be executed with the same parameters
+ * multiple times and get the same result.
+ */
+const containerIdFilePath = (parameters: DockerParameters) => {
+  const { runnerTemporaryPath, githubAction } = parameters;
+
+  return path.join(runnerTemporaryPath, `container_${githubAction}`);
+};
+
 class Docker {
+  /**
+   *  Remove a possible leftover container created by `Docker.run`.
+   */
+  static async ensureContainerRemoval(parameters: RunnerContext) {
+    const cidfile = containerIdFilePath(parameters);
+    if (!existsSync(cidfile)) {
+      return;
+    }
+    const container = readFileSync(cidfile, 'ascii').trim();
+    await exec('docker', ['exec', container, '/bin/bash', '-c', '/cleanup.sh'], {
+      silent: false,
+    });
+    await exec(`docker`, ['rm', '--force', '--volumes', container], { silent: true });
+    rmSync(cidfile);
+  }
+
   static async run(
     image: string,
     parameters: DockerParameters,
@@ -55,10 +83,12 @@ class Docker {
     if (!existsSync(githubHome)) mkdirSync(githubHome);
     const githubWorkflow = path.join(runnerTempPath, '_github_workflow');
     if (!existsSync(githubWorkflow)) mkdirSync(githubWorkflow);
+    const cidfile = containerIdFilePath(parameters);
     const commandPrefix = image === `alpine` ? `/bin/sh` : `/bin/bash`;
 
     return `docker run \
             --workdir ${dockerWorkspacePath} \
+            --cidfile=${cidfile} \
             --rm \
             ${ImageEnvironmentFactory.getEnvVarString(parameters, additionalVariables)} \
             --env GITHUB_WORKSPACE=${dockerWorkspacePath} \

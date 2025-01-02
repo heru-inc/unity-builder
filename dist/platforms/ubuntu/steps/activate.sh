@@ -108,8 +108,17 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
     echo "Activation failed after 5 retries"
     UNITY_EXIT_CODE=1
   else
-    export FLOATING_LICENSE=$(echo "$activation_output" | tail -1 | sed -e 's,.* \([-0-9a-f]\{36\}\).*,\1,')
-    echo "Floating license acquired: \"$FLOATING_LICENSE\""
+    export FLOATING_LICENSE=$(echo "$activation_output" | grep -oP '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+    export FLOATING_LICENSE_FOUND_EXIT_CODE=$?
+
+    if [[ $FLOATING_LICENSE_FOUND_EXIT_CODE -ne 0 ]]
+    then
+      echo "Failed to extract floating license from activation output"
+      UNITY_EXIT_CODE=$FLOATING_LICENSE_FOUND_EXIT_CODE
+    else
+      echo "Floating license acquired: \"$FLOATING_LICENSE\""
+      echo -n "$FLOATING_LICENSE" > /floating_license.txt
+    fi
   fi
 
 else
