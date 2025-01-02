@@ -27,7 +27,7 @@ class Docker {
     }
     const container = readFileSync(cidfile, 'ascii').trim();
     await exec('docker', ['exec', container, '/bin/bash', '-c', '/cleanup.sh'], {
-      silent: false,
+      ignoreReturnCode: true,
     });
     await exec(`docker`, ['rm', '--force', '--volumes', container], { silent: true });
     rmSync(cidfile);
