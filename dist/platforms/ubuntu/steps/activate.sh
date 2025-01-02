@@ -94,12 +94,14 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
       # Increment retry count
       ((retry_count++))
 
-      echo "::warning ::Activation failed, attempting retry #$retry_count"
-      echo "Activation failed, retrying in $delay seconds..."
-      sleep $delay
+      if [[ $retry_count -lt 5 ]]; then
+        echo "::warning ::Activation failed, attempting retry #$retry_count"
+        echo "Activation failed, retrying in $delay seconds..."
+        sleep $delay
 
-      # Double the delay for the next iteration
-      delay=$((delay * 2))
+        # Double the delay for the next iteration
+        delay=$((delay * 2))
+      fi
     fi
   done
 
