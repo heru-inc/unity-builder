@@ -17,6 +17,7 @@ export async function run() {
     const { workspace, actionFolder } = Action;
 
     const buildParameters = await BuildParameters.create();
+    const runnerContext = Action.runnerContext();
     const baseImage = new ImageTag(buildParameters);
 
     let exitCode = -1;
@@ -31,6 +32,7 @@ export async function run() {
               workspace,
               actionFolder,
               ...buildParameters,
+              ...runnerContext,
             });
     } else {
       await CloudRunner.run(buildParameters, baseImage.toString());
