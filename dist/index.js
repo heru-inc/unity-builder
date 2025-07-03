@@ -1,7 +1,7 @@
 require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 94822:
+/***/ 3109:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -33,12 +33,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.run = void 0;
 const core = __importStar(__nccwpck_require__(42186));
 const model_1 = __nccwpck_require__(41359);
 const cli_1 = __nccwpck_require__(55651);
 const mac_builder_1 = __importDefault(__nccwpck_require__(39364));
 const platform_setup_1 = __importDefault(__nccwpck_require__(64423));
-async function runMain() {
+async function run() {
     try {
         if (cli_1.Cli.InitCliMode()) {
             await cli_1.Cli.RunCli();
@@ -48,6 +49,7 @@ async function runMain() {
         model_1.Cache.verify();
         const { workspace, actionFolder } = model_1.Action;
         const buildParameters = await model_1.BuildParameters.create();
+        const runnerContext = model_1.Action.runnerContext();
         const baseImage = new model_1.ImageTag(buildParameters);
         let exitCode = -1;
         if (buildParameters.providerStrategy === 'local') {
@@ -60,6 +62,7 @@ async function runMain() {
                         workspace,
                         actionFolder,
                         ...buildParameters,
+                        ...runnerContext,
                     });
         }
         else {
@@ -78,7 +81,7 @@ async function runMain() {
         core.setFailed(error.message);
     }
 }
-runMain();
+exports.run = run;
 
 
 /***/ }),
@@ -120,6 +123,14 @@ class Action {
     }
     static get workspace() {
         return process.env.GITHUB_WORKSPACE;
+    }
+    static runnerContext() {
+        const runnerTemporaryPath = process.env.RUNNER_TEMP ?? process.cwd();
+        const githubAction = process.env.GITHUB_ACTION ?? process.pid.toString();
+        return {
+            runnerTemporaryPath,
+            githubAction,
+        };
     }
     static checkCompatibility() {
         const currentPlatform = process.platform;
@@ -6048,7 +6059,31 @@ const image_environment_factory_1 = __importDefault(__nccwpck_require__(25145));
 const node_fs_1 = __nccwpck_require__(87561);
 const node_path_1 = __importDefault(__nccwpck_require__(49411));
 const exec_1 = __nccwpck_require__(71514);
+/**
+ * Build a path for a docker --cidfile parameter. Docker will store the the created container.
+ * This path is stable for the whole execution of the action, so it can be executed with the same parameters
+ * multiple times and get the same result.
+ */
+const containerIdFilePath = (parameters) => {
+    const { runnerTemporaryPath, githubAction } = parameters;
+    return node_path_1.default.join(runnerTemporaryPath, `container_${githubAction}`);
+};
 class Docker {
+    /**
+     *  Remove a possible leftover container created by `Docker.run`.
+     */
+    static async ensureContainerRemoval(parameters) {
+        const cidfile = containerIdFilePath(parameters);
+        if (!(0, node_fs_1.existsSync)(cidfile)) {
+            return;
+        }
+        const container = (0, node_fs_1.readFileSync)(cidfile, 'ascii').trim();
+        await (0, exec_1.exec)('docker', ['exec', container, '/bin/bash', '-c', '/cleanup.sh'], {
+            ignoreReturnCode: true,
+        });
+        await (0, exec_1.exec)(`docker`, ['rm', '--force', '--volumes', container], { silent: true });
+        (0, node_fs_1.rmSync)(cidfile);
+    }
     static async run(image, parameters, silent = false, overrideCommands = '', additionalVariables = [], options = {}, entrypointBash = false) {
         let runCommand = '';
         switch (process.platform) {
@@ -6073,9 +6108,11 @@ class Docker {
         const githubWorkflow = node_path_1.default.join(runnerTempPath, '_github_workflow');
         if (!(0, node_fs_1.existsSync)(githubWorkflow))
             (0, node_fs_1.mkdirSync)(githubWorkflow);
+        const cidfile = containerIdFilePath(parameters);
         const commandPrefix = image === `alpine` ? `/bin/sh` : `/bin/bash`;
         return `docker run \
             --workdir ${dockerWorkspacePath} \
+            --cidfile=${cidfile} \
             --rm \
             ${image_environment_factory_1.default.getEnvVarString(parameters, additionalVariables)} \
             --env GITHUB_WORKSPACE=${dockerWorkspacePath} \
@@ -6088,6 +6125,7 @@ class Docker {
             --volume "${actionFolder}/default-build-script:/UnityBuilderAction:z" \
             --volume "${actionFolder}/platforms/ubuntu/steps:/steps:z" \
             --volume "${actionFolder}/platforms/ubuntu/entrypoint.sh:/entrypoint.sh:z" \
+            --volume "${actionFolder}/platforms/ubuntu/cleanup.sh:/cleanup.sh:z" \
             --volume "${actionFolder}/unity-config:/usr/share/unity3d/config/:z" \
             --volume "${actionFolder}/BlankProject":"/BlankProject:z" \
             --cpus=${dockerCpuLimit} \
@@ -8099,6 +8137,56 @@ class Versioning {
     }
 }
 exports["default"] = Versioning;
+
+
+/***/ }),
+
+/***/ 20095:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.run = void 0;
+const core = __importStar(__nccwpck_require__(42186));
+const action_1 = __importDefault(__nccwpck_require__(89088));
+const model_1 = __nccwpck_require__(41359);
+async function run() {
+    try {
+        const parameters = action_1.default.runnerContext();
+        await model_1.Docker.ensureContainerRemoval(parameters);
+    }
+    catch (error) {
+        core.setFailed(error.message);
+    }
+}
+exports.run = run;
 
 
 /***/ }),
@@ -375058,13 +375146,22 @@ module.exports = JSON.parse('["ac","com.ac","edu.ac","gov.ac","net.ac","mil.ac",
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(94822);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
+var __webpack_exports__ = {};
+// This entry need to be wrapped in an IIFE because it need to be in strict mode.
+(() => {
+"use strict";
+var exports = __webpack_exports__;
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.post = exports.main = void 0;
+var main_1 = __nccwpck_require__(3109);
+Object.defineProperty(exports, "main", ({ enumerable: true, get: function () { return main_1.run; } }));
+var post_1 = __nccwpck_require__(20095);
+Object.defineProperty(exports, "post", ({ enumerable: true, get: function () { return post_1.run; } }));
+
+})();
+
+module.exports = __webpack_exports__;
 /******/ })()
 ;
 //# sourceMappingURL=index.js.map
