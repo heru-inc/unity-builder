@@ -1,5 +1,10 @@
 import path from 'node:path';
 
+export interface RunnerContext {
+  runnerTemporaryPath: string;
+  githubAction: string;
+}
+
 class Action {
   static get supportedPlatforms(): string[] {
     return ['linux', 'win32', 'darwin'];
@@ -35,6 +40,16 @@ class Action {
 
   static get workspace(): string {
     return process.env.GITHUB_WORKSPACE!;
+  }
+
+  static runnerContext(): RunnerContext {
+    const runnerTemporaryPath = process.env.RUNNER_TEMP ?? process.cwd();
+    const githubAction = process.env.GITHUB_ACTION ?? process.pid.toString();
+
+    return {
+      runnerTemporaryPath,
+      githubAction,
+    };
   }
 
   static checkCompatibility() {

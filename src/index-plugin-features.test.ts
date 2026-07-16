@@ -44,6 +44,10 @@ vi.mock('./model', () => ({
     checkCompatibility: vi.fn(),
     workspace: '/workspace',
     actionFolder: '/action',
+    runnerContext: vi.fn().mockReturnValue({
+      runnerTemporaryPath: '/tmp',
+      githubAction: 'test-action',
+    }),
   },
   BuildParameters: {
     create: vi.fn(),

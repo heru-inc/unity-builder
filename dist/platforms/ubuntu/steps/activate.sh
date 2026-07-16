@@ -67,18 +67,62 @@ elif [[ -n "$UNITY_LICENSING_SERVER" ]]; then
   #
   echo "Adding licensing server config"
 
-  /opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating > license.txt #is this accessible in a env variable?
+    # Loop the unity-editor call until the license is activated with exponential backoff and a maximum of 5 retries
+  retry_count=0
 
-  # Store the exit code from the verify command
-  UNITY_EXIT_CODE=$?
+  # Initialize delay to 15 seconds
+  delay=15
 
-  if [ $UNITY_EXIT_CODE -eq 0 ]; then
-    PARSEDFILE=$(grep -oP '\".*?\"' < license.txt | tr -d '"')
-    export FLOATING_LICENSE
-    FLOATING_LICENSE=$(sed -n 2p <<< "$PARSEDFILE")
-    FLOATING_LICENSE_TIMEOUT=$(sed -n 4p <<< "$PARSEDFILE")
+  while [[ $retry_count -lt 5 ]]
+  do
+    # Activate license
+    activation_output=$(/opt/unity/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client --acquire-floating)
 
-    echo "Acquired floating license: \"$FLOATING_LICENSE\" with timeout $FLOATING_LICENSE_TIMEOUT"
+    # Store the exit code from the verify command
+    UNITY_EXIT_CODE=$?
+
+    echo "---------- Activation output ----------"
+    echo "$activation_output"
+    echo "---------------------------------------"
+
+    # Check if UNITY_EXIT_CODE is 0 AND activation_output has a UUID
+    if [[ $UNITY_EXIT_CODE -eq 0 && "$activation_output" =~ [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} ]]
+    then
+      echo "Activation successful"
+      break
+    else
+      # Increment retry count
+      ((retry_count++))
+
+      if [[ $retry_count -lt 5 ]]; then
+        echo "::warning ::Activation failed, attempting retry #$retry_count"
+        echo "Activation failed, retrying in $delay seconds..."
+        sleep $delay
+
+        # Double the delay for the next iteration
+        delay=$((delay * 2))
+      fi
+    fi
+  done
+
+  if [[ $retry_count -eq 5 ]]
+  then
+    echo "Activation failed after 5 retries"
+    echo "::error ::Failed to acquire floating license from Unity Licensing Server."
+    echo "Check the activation output above for more details."
+    UNITY_EXIT_CODE=1
+  else
+    export FLOATING_LICENSE=$(echo "$activation_output" | grep -oP '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+    export FLOATING_LICENSE_FOUND_EXIT_CODE=$?
+
+    if [[ $FLOATING_LICENSE_FOUND_EXIT_CODE -ne 0 ]]
+    then
+      echo "::error ::Failed to extract floating license from activation output"
+      UNITY_EXIT_CODE=$FLOATING_LICENSE_FOUND_EXIT_CODE
+    else
+      echo "Floating license acquired: \"$FLOATING_LICENSE\""
+      echo -n "$FLOATING_LICENSE" > /floating_license.txt
+    fi
   fi
 else
   #
